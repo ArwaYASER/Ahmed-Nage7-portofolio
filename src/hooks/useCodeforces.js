@@ -71,16 +71,27 @@ export default function useCodeforces() {
 
         const user = userData.result[0];
 
-        const solvedProblems = new Set(
-          allSubmissions
-            .filter((submission) => submission.verdict === "OK")
-            .map((submission) => {
-              const problem = submission.problem;
+       const accepted = allSubmissions.filter(
+  (submission) => submission.verdict === "OK"
+);
 
-              return `${problem.contestId ?? problem.problemsetName}-${problem.index}`;
-            })
-        );
+const solvedProblems = new Set(
+  accepted.map(({ problem }) => {
+    if (problem.contestId != null) {
+      return `${problem.contestId}-${problem.index}`;
+    }
 
+    if (problem.problemsetName) {
+      return `${problem.problemsetName}-${problem.index}`;
+    }
+
+    return problem.name;
+  })
+);
+
+console.log("Total submissions:", allSubmissions.length);
+console.log("Accepted submissions:", accepted.length);
+console.log("Unique solved problems:", solvedProblems.size);
         setStats({
           handle: user.handle,
           rating: user.rating ?? null,
