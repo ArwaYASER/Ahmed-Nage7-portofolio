@@ -57,7 +57,14 @@ export default function useCodeforces() {
           }
 
           const submissions = data.result;
-
+          console.log("Page from:", from);
+          console.log("Submissions in this page:", submissions.length);
+          console.log(
+          "First ID:",
+          submissions[0]?.id,
+          "Last ID:",
+           submissions[submissions.length - 1]?.id
+);
           allSubmissions.push(...submissions);
 
           if (submissions.length < COUNT) break;
@@ -66,7 +73,9 @@ export default function useCodeforces() {
 
           await sleep(2100);
         }
-
+console.log("Final submissions count:", allSubmissions.length);
+console.log("First submission ID:", allSubmissions[0]?.id);
+console.log("Last submission ID:", allSubmissions.at(-1)?.id);
         if (controller.signal.aborted) return;
 
         const user = userData.result[0];
