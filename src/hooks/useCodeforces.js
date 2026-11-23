@@ -2,6 +2,10 @@
 import { useEffect, useState } from "react";
 
 const HANDLE = "_Nageh";
+const COUNT = 1000;
+
+const sleep = (ms) =>
+  new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function useCodeforces() {
   const [stats, setStats] = useState(null);
@@ -14,42 +18,67 @@ export default function useCodeforces() {
     async function fetchStats() {
       try {
         setLoading(true);
+        setError(false);
 
-        const [userResponse, submissionsResponse] =
-          await Promise.all([
-            fetch(
-              `https://codeforces.com/api/user.info?handles=${HANDLE}`,
-              { signal: controller.signal }
-            ),
-            fetch(
-              `https://codeforces.com/api/user.status?handle=${HANDLE}`,
-              { signal: controller.signal }
-            ),
-          ]);
+        const userResponse = await fetch(
+          `https://codeforces.com/api/user.info?handles=${HANDLE}`,
+          { signal: controller.signal }
+        );
 
-        if (!userResponse.ok || !submissionsResponse.ok) {
-          throw new Error("Failed to fetch Codeforces data");
+        if (!userResponse.ok) {
+          throw new Error("Failed to fetch user info");
         }
 
         const userData = await userResponse.json();
-        const submissionsData = await submissionsResponse.json();
 
-        if (
-          userData.status !== "OK" ||
-          submissionsData.status !== "OK"
-        ) {
-          throw new Error("Invalid Codeforces response");
+        if (userData.status !== "OK") {
+          throw new Error("Invalid user data");
         }
+
+        let from = 1;
+        let allSubmissions = [];
+
+        while (true) {
+          if (controller.signal.aborted) return;
+
+          const response = await fetch(
+            `https://codeforces.com/api/user.status?handle=${HANDLE}&from=${from}&count=${COUNT}`,
+            { signal: controller.signal }
+          );
+
+          if (!response.ok) {
+            throw new Error("Failed to fetch submissions");
+          }
+
+          const data = await response.json();
+
+          if (data.status !== "OK") {
+            throw new Error("Codeforces API error");
+          }
+
+          const submissions = data.result;
+
+          allSubmissions.push(...submissions);
+
+          if (submissions.length < COUNT) break;
+
+          from += COUNT;
+
+          await sleep(2100);
+        }
+
+        if (controller.signal.aborted) return;
 
         const user = userData.result[0];
 
         const solvedProblems = new Set(
-          submissionsData.result
+          allSubmissions
             .filter((submission) => submission.verdict === "OK")
-            .map(
-              (submission) =>
-                `${submission.problem.contestId ?? "unknown"}-${submission.problem.index}-${submission.problem.name}`
-            )
+            .map((submission) => {
+              const problem = submission.problem;
+
+              return `${problem.contestId ?? problem.problemsetName}-${problem.index}`;
+            })
         );
 
         setStats({
@@ -61,11 +90,13 @@ export default function useCodeforces() {
         });
 
         setError(false);
+
       } catch (err) {
         if (err.name !== "AbortError") {
-          console.error(err);
+          console.error("Codeforces Error:", err);
           setError(true);
         }
+
       } finally {
         if (!controller.signal.aborted) {
           setLoading(false);
@@ -76,6 +107,7 @@ export default function useCodeforces() {
     fetchStats();
 
     return () => controller.abort();
+
   }, []);
 
   return { stats, loading, error };
