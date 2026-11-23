@@ -1,48 +1,58 @@
-
 import json
-import re
+import time
+import requests
 from datetime import datetime, timezone
 from pathlib import Path
 
-import requests
-from bs4 import BeautifulSoup
-
 HANDLE = "_Nageh"
-PROFILE_URL = f"https://codeforces.com/profile/{HANDLE}"
+API_URL = "https://codeforces.com/api/user.status"
 
-response = requests.get(
-    PROFILE_URL,
-    headers={"User-Agent": "Mozilla/5.0"},
-    timeout=30,
-)
-response.raise_for_status()
+solved = set()
+start = 1
 
-soup = BeautifulSoup(response.text, "html.parser")
-page_text = soup.get_text(" ", strip=True)
+while True:
+    response = requests.get(
+        API_URL,
+        params={"handle": HANDLE, "from": start, "count": 1000},
+        timeout=30,
+    )
+    response.raise_for_status()
 
-match = re.search(
-    r"([\d,]+)\s+problems\s+solved\s+for all time",
-    page_text,
-    re.IGNORECASE,
-)
+    data = response.json()
 
-if not match:
-    raise RuntimeError("Could not find solved problems count.")
+    if data["status"] != "OK":
+        raise RuntimeError(data.get("comment", "Codeforces API error"))
 
-solved = int(match.group(1).replace(",", ""))
+    submissions = data["result"]
+
+    if not submissions:
+        break
+
+    for sub in submissions:
+        if sub.get("verdict") == "OK":
+            problem = sub["problem"]
+            key = (
+                problem.get("problemsetName"),
+                problem.get("contestId"),
+                problem.get("index"),
+            )
+            solved.add(key)
+
+    start += len(submissions)
+
+    if len(submissions) < 1000:
+        break
+
+    time.sleep(2.5)
 
 output = {
     "handle": HANDLE,
-    "solved": solved,
+    "solved": len(solved),
     "updatedAt": datetime.now(timezone.utc).isoformat(),
 }
 
-output_path = Path("public/codeforces-stats.json")
-output_path.parent.mkdir(parents=True, exist_ok=True)
+path = Path("public/codeforces-stats.json")
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(json.dumps(output, indent=2), encoding="utf-8")
 
-output_path.write_text(
-    json.dumps(output, indent=2),
-    encoding="utf-8",
-)
-
-print(f"Updated {HANDLE}: {solved} problems solved.")
+print(f"Updated {HANDLE}: {len(solved)} problems solved.")
